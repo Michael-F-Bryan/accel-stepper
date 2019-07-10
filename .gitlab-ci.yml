@@ -1,0 +1,35 @@
+image: "rust:1.31.1" # first release with stable editions
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/.cache/cargo
+
+cache:
+  paths:
+    - $CARGO_HOME
+
+no_std:
+  stage: build
+  before_script:
+    - rustc --version && cargo --version
+  script:
+    - cargo build --all --verbose
+    - cargo test --all --verbose
+
+generate-docs:
+  image: "rustlang/rust:nightly-slim" # nightly gives inter-doc links
+  stage: build
+  script:
+    - cargo doc --all --verbose --all-features
+    - echo '<meta http-equiv="refresh" content="0; url=accel_stepper/index.html" /> ' > target/doc/index.html
+  artifacts:
+    paths:
+      - target/doc
+
+pages:
+  stage: deploy
+  script:
+    - cp -r target/doc public
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
