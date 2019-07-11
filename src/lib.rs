@@ -6,7 +6,7 @@ extern crate std;
 
 use core::time::Duration;
 
-/// A high-level stepper motor driver.
+/// A stepper motor driver.
 #[derive(Debug, PartialEq)]
 pub struct Driver<D> {
     device: D,
