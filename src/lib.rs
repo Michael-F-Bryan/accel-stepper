@@ -113,6 +113,12 @@ impl<D> Driver<D> {
     }
 
     /// Set the desired constant speed in `steps/sec`.
+    ///
+    /// Speeds of more than 1000 steps per second are unreliable. Very slow
+    /// speeds may be set (eg 0.00027777 for once per hour, approximately). Speed
+    /// accuracy depends on the system's clock. Jitter depends on how frequently
+    /// you call the [`Driver::poll_speed()`] method. The speed will be limited
+    /// by the current value of [`Driver::max_speed()`].
     pub fn set_speed(&mut self, speed: f32) {
         if speed == self.speed {
             return;
@@ -273,7 +279,12 @@ impl<D: Device> Driver<D> {
         }
     }
 
-    fn poll_speed<C: SystemClock>(&mut self, clock: C) -> bool {
+    /// Poll the motor and step it if a step is due, implementing a constant
+    /// speed as set by the most recent call to [`Driver::set_speed()`].
+    ///
+    /// You must call this as frequently as possible, but at least once per step
+    /// interval, returns true if the motor was stepped.
+    pub fn poll_speed<C: SystemClock>(&mut self, clock: C) -> bool {
         // Dont do anything unless we actually have a step interval
         if self.step_interval == Duration::default() {
             return false;
