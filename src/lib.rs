@@ -20,6 +20,7 @@ pub struct Driver<D> {
     step_interval: Duration,
     speed: f32,
     target_position: i64,
+    last_step_time: Duration,
 
     /// The step counter for speed calculations
     step_counter: i64,
@@ -43,6 +44,7 @@ impl<D> Driver<D> {
             initial_step_size: Duration::default(),
             min_step_size: Duration::default(),
             last_step_size: Duration::default(),
+            last_step_time: Duration::default(),
         }
     }
 
@@ -265,17 +267,42 @@ impl<D: Device> Driver<D> {
     /// For correctness, the same [`SystemClock`] should be used every time
     /// [`Driver::poll()`] is called. Failing to do so may mess up internal
     /// timing calculations.
-    pub fn poll<C: SystemClock>(&mut self, _clock: C) {
-        unimplemented!()
+    pub fn poll<C: SystemClock>(&mut self, clock: C) {
+        if self.poll_speed(clock) {
+            self.compute_new_speed();
+        }
+    }
+
+    fn poll_speed<C: SystemClock>(&mut self, clock: C) -> bool {
+        // Dont do anything unless we actually have a step interval
+        if self.step_interval == Duration::default() {
+            return false;
+        }
+
+        let now = clock.elapsed();
+
+        if now - self.last_step_time >= self.step_interval {
+            // we need to take a step
+
+            if self.speed > 0.0 {
+                self.current_position += 1;
+            } else {
+                self.current_position -= 1;
+            }
+
+            self.device.step(self.current_position());
+            self.last_step_time = now; // Caution: does not account for costs in step()
+
+            true
+        } else {
+            false
+        }
     }
 }
 
 /// An interface to the stepper motor.
 pub trait Device {
-    /// Take one step forwards.
-    fn forward(&mut self);
-    /// Take one step backwards.
-    fn backward(&mut self);
+    fn step(&mut self, position: i64);
 }
 
 /// Something which records the elapsed real time.
@@ -343,18 +370,19 @@ impl FloatHelpers for f32 {
     }
 }
 
+/// Workarounds because working with `Duration` and `f32` requires nightly (see
+/// the `duration_float` feature).
 trait DurationHelpers {
-    /// A constructor which accepts a f32, because the real
-    /// `Duration::from_secs_f32()` requires the `duration_float` feature.
     fn from_secs_f32_2(secs: f32) -> Self;
 
     fn as_secs_f32_2(&self) -> f32;
 }
 
+const NANOS_PER_SEC: u32 = 1_000_000_000;
+
 impl DurationHelpers for Duration {
     fn from_secs_f32_2(secs: f32) -> Self {
         // copied straight from libcore/time.rs
-        const NANOS_PER_SEC: u32 = 1_000_000_000;
 
         let nanos = secs * (NANOS_PER_SEC as f32);
         assert!(nanos.is_finite());
@@ -367,6 +395,6 @@ impl DurationHelpers for Duration {
     }
 
     fn as_secs_f32_2(&self) -> f32 {
-        unimplemented!()
+        (self.as_secs() as f32) + (self.subsec_nanos() as f32) / (NANOS_PER_SEC as f32)
     }
 }
