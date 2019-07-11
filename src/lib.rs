@@ -20,8 +20,13 @@ pub struct Driver<D> {
     step_interval: Duration,
     speed: f32,
     target_position: i64,
-    n: f32,
-    c0: f32,
+
+    /// The step counter for speed calculations
+    step_counter: i64,
+    initial_step_size: Duration,
+    last_step_size: Duration,
+    /// Min step size based on `max_speed`.
+    min_step_size: Duration,
 }
 
 impl<D> Driver<D> {
@@ -34,8 +39,10 @@ impl<D> Driver<D> {
             step_interval: Duration::default(),
             speed: 0.0,
             target_position: 0,
-            n: 0.0,
-            c0: 0.0,
+            step_counter: 0,
+            initial_step_size: Duration::default(),
+            min_step_size: Duration::default(),
+            last_step_size: Duration::default(),
         }
     }
 
@@ -87,10 +94,12 @@ impl<D> Driver<D> {
         let acceleration = acceleration.abs();
 
         if self.acceleration != acceleration {
-            // Recompute _n per Equation 17
-            self.n = self.n * (self.acceleration / acceleration);
-            // New c0 per Equation 7, with correction per Equation 15
-            self.c0 = 0.676 * (2.0 / acceleration).sqrt() * 1e6;
+            // Recompute step_counter per Equation 17
+            self.step_counter =
+                (self.step_counter as f32 * self.acceleration / acceleration) as i64;
+            // New initial_step_size per Equation 7, with correction per Equation 15
+            let initial_step_size = 0.676 * (2.0 / acceleration).sqrt();
+            self.initial_step_size = Duration::from_secs_f32_2(initial_step_size);
             self.acceleration = acceleration;
             self.compute_new_speed();
         }
@@ -180,7 +189,64 @@ impl<D> Driver<D> {
     }
 
     fn compute_new_speed(&mut self) {
-        unimplemented!()
+        let distance_to = self.distance_to_go();
+        let steps_to_stop = (self.speed() * self.speed()) / (2.0 * self.acceleration());
+        let steps_to_stop = steps_to_stop.round() as i64;
+
+        if distance_to == 0 && steps_to_stop <= 1 {
+            // We are at the target and its time to stop
+            self.step_interval = Duration::default();
+            self.speed = 0.0;
+            self.step_counter = 0;
+            return;
+        }
+
+        if distance_to > 0 {
+            // the target is in front of us
+            // We need to go forwards, maybe decelerate now?
+            if self.step_counter > 0 {
+                // Currently accelerating, need to decel now? Or maybe going the wrong way?
+                if steps_to_stop >= distance_to || self.speed < 0.0 {
+                    self.step_counter = -steps_to_stop; // start decelerating
+                }
+            } else if self.step_counter < 0 {
+                // Currently decelerating, need to accel again?
+                if steps_to_stop < distance_to && self.speed > 0.0 {
+                    self.step_counter = -self.step_counter; // start accelerating
+                }
+            }
+        } else if distance_to < 0 {
+            // we've gone past the target and need to go backwards. Maybe
+            // decelerating.
+            if self.step_counter > 0 {
+                // Currently accelerating, need to decel now? Or maybe going the wrong way?
+                if steps_to_stop >= -distance_to || self.speed > 0.0 {
+                    self.step_counter = -steps_to_stop;
+                }
+            } else if self.step_counter < 0 {
+                // currently decelerating, need to accel again?
+                if steps_to_stop < -distance_to && self.speed > 0.0 {
+                    self.step_counter = -self.step_counter;
+                }
+            }
+        }
+
+        if self.step_counter == 0 {
+            self.last_step_size = self.initial_step_size;
+        } else {
+            // Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
+            let last_step_size = self.last_step_size.as_secs_f32_2();
+            let last_step_size =
+                last_step_size - last_step_size * 2.0 / ((4 * self.step_counter) as f32 + 1.0);
+            self.last_step_size = Duration::from_secs_f32_2(last_step_size);
+            if self.last_step_size < self.min_step_size {
+                self.last_step_size = self.min_step_size;
+            }
+        }
+
+        self.step_counter += 1;
+        self.step_interval = self.last_step_size;
+        self.speed = 1.0 / self.last_step_size.as_secs_f32_2();
     }
 }
 
@@ -274,5 +340,33 @@ impl FloatHelpers for f32 {
         } else {
             self
         }
+    }
+}
+
+trait DurationHelpers {
+    /// A constructor which accepts a f32, because the real
+    /// `Duration::from_secs_f32()` requires the `duration_float` feature.
+    fn from_secs_f32_2(secs: f32) -> Self;
+
+    fn as_secs_f32_2(&self) -> f32;
+}
+
+impl DurationHelpers for Duration {
+    fn from_secs_f32_2(secs: f32) -> Self {
+        // copied straight from libcore/time.rs
+        const NANOS_PER_SEC: u32 = 1_000_000_000;
+
+        let nanos = secs * (NANOS_PER_SEC as f32);
+        assert!(nanos.is_finite());
+
+        let nanos = nanos as u128;
+        Duration::new(
+            (nanos / (NANOS_PER_SEC as u128)) as u64,
+            (nanos % (NANOS_PER_SEC as u128)) as u32,
+        )
+    }
+
+    fn as_secs_f32_2(&self) -> f32 {
+        unimplemented!()
     }
 }
