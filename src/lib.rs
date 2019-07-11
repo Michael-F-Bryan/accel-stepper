@@ -4,6 +4,10 @@
 #[macro_use]
 extern crate std;
 
+#[cfg(not(feature = "std"))]
+#[allow(unused_imports)]
+use libm::F32Ext;
+
 use core::time::Duration;
 
 /// A stepper motor driver.
@@ -13,6 +17,11 @@ pub struct Driver<D> {
     max_speed: f32,
     acceleration: f32,
     current_position: i64,
+    step_interval: Duration,
+    speed: f32,
+    target_position: i64,
+    n: f32,
+    c0: f32,
 }
 
 impl<D> Driver<D> {
@@ -22,6 +31,11 @@ impl<D> Driver<D> {
             max_speed: 1.0,
             acceleration: 10.0,
             current_position: 0,
+            step_interval: Duration::default(),
+            speed: 0.0,
+            target_position: 0,
+            n: 0.0,
+            c0: 0.0,
         }
     }
 
@@ -33,13 +47,18 @@ impl<D> Driver<D> {
         self.device
     }
 
-    pub fn move_to(&mut self, _location: i64) {
-        unimplemented!()
+    /// Move to the specified location relative to the zero point (typically
+    /// set when calibrating using [`Driver::set_current_position()`]).
+    pub fn move_to(&mut self, location: i64) {
+        if self.target_position() != location {
+            self.target_position = location;
+            self.compute_new_speed();
+        }
     }
 
     /// Move forward by the specified number of steps.
-    pub fn move_by(&mut self, _delta: i64) {
-        unimplemented!()
+    pub fn move_by(&mut self, delta: i64) {
+        self.move_to(self.current_position() + delta);
     }
 
     /// Set the maximum permitted speed in `steps/second`.
@@ -60,42 +79,71 @@ impl<D> Driver<D> {
     }
 
     /// Set the acceleration/deceleration rate (in `steps/sec/sec`).
-    pub fn set_acceleration(&mut self, _acceleration: f32) {
-        unimplemented!()
+    pub fn set_acceleration(&mut self, acceleration: f32) {
+        if acceleration == 0.0 {
+            return;
+        }
+
+        let acceleration = acceleration.abs();
+
+        if self.acceleration != acceleration {
+            // Recompute _n per Equation 17
+            self.n = self.n * (self.acceleration / acceleration);
+            // New c0 per Equation 7, with correction per Equation 15
+            self.c0 = 0.676 * (2.0 / acceleration).sqrt() * 1e6;
+            self.acceleration = acceleration;
+            self.compute_new_speed();
+        }
     }
 
     /// Get the acceleration/deceleration rate.
     pub fn acceleration(&self) -> f32 {
-        unimplemented!()
+        self.acceleration
     }
 
     /// Set the desired constant speed in `steps/sec`.
-    pub fn set_speed(&mut self, _speed: f32) {
-        unimplemented!()
+    pub fn set_speed(&mut self, speed: f32) {
+        if speed == self.speed {
+            return;
+        }
+
+        let speed = speed.constrain(-self.max_speed, self.max_speed);
+
+        if speed == 0.0 || !speed.is_finite() {
+            self.step_interval = Duration::default();
+        } else {
+            let duration_nanos = (1e9 / speed).abs().round();
+            self.step_interval = Duration::from_nanos(duration_nanos as u64);
+        }
+
+        self.speed = speed;
     }
 
     /// Get the most recently set speed.
     pub fn speed(&self) -> f32 {
-        unimplemented!()
+        self.speed
     }
 
     /// Get the number of steps to go until reaching the target position.
     pub fn distance_to_go(&self) -> i64 {
-        unimplemented!()
+        self.target_position() - self.current_position()
     }
 
     /// Get the most recently set target position.
     pub fn target_position(&self) -> i64 {
-        unimplemented!()
+        self.target_position
     }
 
     /// Reset the current motor position so the current location is considered
-    /// the new 0` position.
+    /// the new `0` position.
     ///
     ///  Useful for setting a zero position on a stepper after an initial
     /// hardware positioning move.
     pub fn set_current_position(&mut self, position: i64) {
         self.current_position = position;
+        self.target_position = position;
+        self.step_interval = Duration::default();
+        self.speed = 0.0;
     }
 
     /// Get the current motor position, as measured by counting the number of
@@ -112,11 +160,26 @@ impl<D> Driver<D> {
     /// Sets a new target position that causes the stepper to stop as quickly as
     /// possible, using the current speed and acceleration parameters.
     pub fn stop(&mut self) {
-        unimplemented!()
+        if self.speed == 0.0 {
+            return;
+        }
+
+        let stopping_distance = (self.speed * self.speed) / (2.0 * self.acceleration);
+        let steps_to_stop = stopping_distance.round() as i64 + 1;
+
+        if self.speed > 0.0 {
+            self.move_by(steps_to_stop);
+        } else {
+            self.move_by(-steps_to_stop);
+        }
     }
 
     /// Checks to see if the motor is currently running to a target.
     pub fn is_running(&self) -> bool {
+        self.speed == 0.0 && self.target_position() == self.current_position()
+    }
+
+    fn compute_new_speed(&mut self) {
         unimplemented!()
     }
 }
@@ -192,6 +255,24 @@ impl SystemClock for OperatingSystemClock {
 #[cfg(feature = "std")]
 impl Default for OperatingSystemClock {
     fn default() -> OperatingSystemClock {
-        OperatingSystemClock { created_at: std::time::Instant::now() }
+        OperatingSystemClock {
+            created_at: std::time::Instant::now(),
+        }
+    }
+}
+
+trait FloatHelpers {
+    fn constrain(self, lower: Self, upper: Self) -> Self;
+}
+
+impl FloatHelpers for f32 {
+    fn constrain(self, lower: Self, upper: Self) -> Self {
+        if self < lower {
+            lower
+        } else if upper < self {
+            upper
+        } else {
+            self
+        }
     }
 }
