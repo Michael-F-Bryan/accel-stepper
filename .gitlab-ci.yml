@@ -14,6 +14,14 @@ no_std:
     - cargo build --all --verbose
     - cargo test --all --verbose
 
+with_std:
+  stage: build
+  before_script:
+    - rustc --version && cargo --version
+  script:
+    - cargo build --all --verbose --all-features
+    - cargo test --all --verbose --all-features
+
 generate-docs:
   image: "rustlang/rust:nightly-slim" # nightly gives inter-doc links
   stage: build

@@ -1,4 +1,10 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(all(not(feature = "std"), test))]
+#[macro_use]
+extern crate std;
+
+use core::time::Duration;
 
 /// A high-level stepper motor driver.
 #[derive(Debug, PartialEq)]
@@ -121,10 +127,16 @@ impl<D: Device> Driver<D> {
     /// This function must called as frequently as possoble, but at least once
     /// per minimum step time interval, preferably as part of the main loop.
     ///
-    /// Note that each call to `poll()` will make at most one step, and then only
-    /// when a step is due, based on the current speed and the time since the
-    /// last step.
-    pub fn poll(&mut self) {
+    /// Note that each call to [`Driver::poll()`] will make at most one step, and
+    /// then only when a step is due, based on the current speed and the time
+    /// since the last step.
+    ///
+    /// # Warning
+    ///
+    /// For correctness, the same [`SystemClock`] should be used every time
+    /// [`Driver::poll()`] is called. Failing to do so may mess up internal
+    /// timing calculations.
+    pub fn poll<C: SystemClock>(&mut self, _clock: C) {
         unimplemented!()
     }
 }
@@ -135,4 +147,44 @@ pub trait Device {
     fn forward(&mut self);
     /// Take one step backwards.
     fn backward(&mut self);
+}
+
+/// Something which records the elapsed real time.
+///
+/// This uses shared references because it may be shared between multiple
+/// components at any one time.
+pub trait SystemClock {
+    /// The amount of time that has passed since a clock-specific reference
+    /// point (e.g. device startup or the unix epoch).
+    fn elapsed(&self) -> Duration;
+}
+
+impl<F> SystemClock for F
+where
+    F: Fn() -> Duration,
+{
+    fn elapsed(&self) -> Duration {
+        self()
+    }
+}
+
+/// A monotonically non-decreasing clock backed by the operating system.
+#[cfg(feature = "std")]
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct OperatingSystemClock {
+    created: std::time::Instant,
+}
+
+#[cfg(feature = "std")]
+impl OperatingSystemClock {
+    pub fn new() -> OperatingSystemClock {
+        OperatingSystemClock::default()
+    }
+}
+
+#[cfg(feature = "std")]
+impl SystemClock for OperatingSystemClock {
+    fn elapsed(&self) -> Duration {
+        self.created_at.elapsed()
+    }
 }
