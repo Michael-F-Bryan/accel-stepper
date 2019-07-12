@@ -4,13 +4,13 @@ use embedded_hal::digital::v2::OutputPin;
 /// A [`Device`] which has step and direction pins.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct StepAndDirection<Step, Direction> {
-    step: Step, 
+    step: Step,
     direction: Direction,
 }
 
 impl<Step, Direction> StepAndDirection<Step, Direction> {
     pub fn new(step: Step, direction: Direction) -> Self {
-        StepAndDirection {step, direction }
+        StepAndDirection { step, direction }
     }
 
     pub fn into_inner(self) -> (Step, Direction) {

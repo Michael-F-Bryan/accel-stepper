@@ -4,16 +4,17 @@ version = "0.1.0"
 authors = ["Michael Bryan <michaelfbryan@gmail.com>"]
 edition = "2018"
 
+[package.metadata.docs.rs]
+all-features = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 libm = "0.1.4"
 embedded-hal = { version = "0.2.3", optional = true }
+void = "1.0.2"
 
 [features]
 default = []
 std = []
 hal = ["embedded-hal"]
-
-[package.metadata.docs.rs]
-all-features = true

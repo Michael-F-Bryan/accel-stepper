@@ -282,7 +282,7 @@ impl<D: Device> Driver<D> {
     /// [`Driver::poll()`] is called. Failing to do so may mess up internal
     /// timing calculations.
     #[inline]
-    pub fn poll<C: SystemClock>(&mut self, clock: C) -> Result<(), D::Error> {
+    pub fn poll<C: SystemClock>(&mut self, clock: &C) -> Result<(), D::Error> {
         if self.poll_speed(clock)? {
             self.compute_new_speed();
         }
@@ -295,7 +295,7 @@ impl<D: Device> Driver<D> {
     ///
     /// You must call this as frequently as possible, but at least once per step
     /// interval, returns true if the motor was stepped.
-    pub fn poll_speed<C: SystemClock>(&mut self, clock: C) -> Result<bool, D::Error> {
+    pub fn poll_speed<C: SystemClock>(&mut self, clock: &C) -> Result<bool, D::Error> {
         // Dont do anything unless we actually have a step interval
         if self.step_interval == Duration::default() {
             return Ok(false);
@@ -368,5 +368,70 @@ impl DurationHelpers for Duration {
 
     fn as_secs_f32_2(&self) -> f32 {
         (self.as_secs() as f32) + (self.subsec_nanos() as f32) / (NANOS_PER_SEC as f32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[derive(Debug, Copy, Clone, PartialEq, Default)]
+    struct NopDevice;
+
+    impl Device for NopDevice {
+        type Error = ();
+
+        fn step(&mut self, _position: i64) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct DummyClock {
+        ticks: Cell<u32>,
+    }
+
+    impl SystemClock for DummyClock {
+        fn elapsed(&self) -> Duration {
+            let ticks = self.ticks.get();
+            self.ticks.set(ticks + 1);
+
+            Duration::new(ticks as u64, 0)
+        }
+    }
+
+    #[test]
+    fn compute_new_speeds_when_already_at_target() {
+        let mut driver = Driver {
+            device: NopDevice,
+            ..Default::default()
+        };
+        driver.target_position = driver.current_position;
+
+        driver.compute_new_speed();
+
+        assert_eq!(driver.speed(), 0.0);
+        assert_eq!(driver.step_interval, Duration::new(0, 0));
+    }
+
+    #[test]
+    fn dont_step_when_already_at_target() {
+        let mut forward = 0;
+        let mut back = 0;
+        let clock = DummyClock::default();
+
+        {
+            let dev = crate::func_device(|| forward += 1, || back += 1);
+            let mut driver = Driver::new(dev);
+            driver.target_position = driver.current_position;
+
+            for _ in 0..100 {
+                driver.poll(&clock).unwrap();
+            }
+        }
+
+        assert_eq!(forward, 0);
+        assert_eq!(back, 0);
     }
 }
