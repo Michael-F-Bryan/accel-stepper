@@ -1,6 +1,14 @@
+#[allow(unused_imports)] // for rustdoc links
+use void::Void;
+
 /// An interface to the stepper motor.
 pub trait Device {
-    fn step(&mut self, position: i64);
+    /// The type of error that may be encountered when taking a step.
+    ///
+    /// Use `!` or [`Void`] if stepping can never fail.
+    type Error;
+
+    fn step(&mut self, position: i64) -> Result<(), Self::Error>;
 }
 
 /// A [`Device`] which will call one function to make a forwards step, and
@@ -20,16 +28,18 @@ impl<Forwards, Backwards> FunctionalDevice<Forwards, Backwards> {
     }
 }
 
-impl<Forwards, Backwards> Device for FunctionalDevice<Forwards, Backwards>
+impl<Forwards, Backwards, E> Device for FunctionalDevice<Forwards, Backwards>
 where
-    Forwards: FnMut(),
-    Backwards: FnMut(),
+    Forwards: FnMut() -> Result<(), E>,
+    Backwards: FnMut() -> Result<(), E>,
 {
-    fn step(&mut self, position: i64) {
+    type Error = E;
+
+    fn step(&mut self, position: i64) -> Result<(), Self::Error> {
         if position >= 0 {
-            (self.forwards)();
+            (self.forwards)()
         } else {
-            (self.backwards)();
+            (self.backwards)()
         }
     }
 }

@@ -268,10 +268,12 @@ impl<D: Device> Driver<D> {
     /// For correctness, the same [`SystemClock`] should be used every time
     /// [`Driver::poll()`] is called. Failing to do so may mess up internal
     /// timing calculations.
-    pub fn poll<C: SystemClock>(&mut self, clock: C) {
-        if self.poll_speed(clock) {
+    pub fn poll<C: SystemClock>(&mut self, clock: C) -> Result<(), D::Error>{
+        if self.poll_speed(clock)? {
             self.compute_new_speed();
         }
+
+        Ok(())
     }
 
     /// Poll the motor and step it if a step is due, implementing a constant
@@ -279,10 +281,10 @@ impl<D: Device> Driver<D> {
     ///
     /// You must call this as frequently as possible, but at least once per step
     /// interval, returns true if the motor was stepped.
-    pub fn poll_speed<C: SystemClock>(&mut self, clock: C) -> bool {
+    pub fn poll_speed<C: SystemClock>(&mut self, clock: C) -> Result<bool, D::Error> {
         // Dont do anything unless we actually have a step interval
         if self.step_interval == Duration::default() {
-            return false;
+            return Ok(false);
         }
 
         let now = clock.elapsed();
@@ -290,18 +292,22 @@ impl<D: Device> Driver<D> {
         if now - self.last_step_time >= self.step_interval {
             // we need to take a step
 
-            if self.speed > 0.0 {
-                self.current_position += 1;
+            // Note: we can't assign to current_position directly because we
+            // a failed step shouldn't update any internal state
+            let new_position = if self.speed > 0.0 {
+                self.current_position + 1
             } else {
-                self.current_position -= 1;
-            }
+                self.current_position - 1
+            };
 
-            self.device.step(self.current_position());
+            self.device.step(new_position)?;
+
+            self.current_position = new_position;
             self.last_step_time = now; // Caution: does not account for costs in step()
 
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 }
