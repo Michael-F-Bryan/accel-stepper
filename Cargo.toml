@@ -8,8 +8,12 @@ edition = "2018"
 
 [dependencies]
 libm = "0.1.4"
-void = "1.0.2"
+embedded-hal = { version = "0.2.3", optional = true }
 
 [features]
 default = []
 std = []
+hal = ["embedded-hal"]
+
+[package.metadata.docs.rs]
+all-features = true

@@ -1,11 +1,8 @@
-#[allow(unused_imports)] // for rustdoc links
-use void::Void;
-
 /// An interface to the stepper motor.
 pub trait Device {
     /// The type of error that may be encountered when taking a step.
     ///
-    /// Use `!` or [`Void`] if stepping can never fail.
+    /// Use `!` (or `void::Void` on stable) if stepping can never fail.
     type Error;
 
     fn step(&mut self, position: i64) -> Result<(), Self::Error>;
@@ -35,6 +32,7 @@ where
 {
     type Error = E;
 
+    #[inline]
     fn step(&mut self, position: i64) -> Result<(), Self::Error> {
         if position >= 0 {
             (self.forwards)()

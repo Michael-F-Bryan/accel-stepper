@@ -6,7 +6,7 @@ use crate::{Device, SystemClock};
 use core::time::Duration;
 
 /// A stepper motor driver.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Driver<D> {
     device: D,
     max_speed: f32,
@@ -53,6 +53,7 @@ impl<D> Driver<D> {
 
     /// Move to the specified location relative to the zero point (typically
     /// set when calibrating using [`Driver::set_current_position()`]).
+    #[inline]
     pub fn move_to(&mut self, location: i64) {
         if self.target_position() != location {
             self.target_position = location;
@@ -61,6 +62,7 @@ impl<D> Driver<D> {
     }
 
     /// Move forward by the specified number of steps.
+    #[inline]
     pub fn move_by(&mut self, delta: i64) {
         self.move_to(self.current_position() + delta);
     }
@@ -71,6 +73,7 @@ impl<D> Driver<D> {
     ///
     /// the maximum speed achievable depends on your processor and clock speed.
     /// The default max speed is `1.0` step per second.
+    #[inline]
     pub fn set_max_speed(&mut self, steps_per_second: f32) {
         debug_assert!(steps_per_second > 0.0);
 
@@ -78,11 +81,13 @@ impl<D> Driver<D> {
     }
 
     /// Get the maximum speed.
+    #[inline]
     pub fn max_speed(&self) -> f32 {
         self.max_speed
     }
 
     /// Set the acceleration/deceleration rate (in `steps/sec/sec`).
+    #[inline]
     pub fn set_acceleration(&mut self, acceleration: f32) {
         if acceleration == 0.0 {
             return;
@@ -103,6 +108,7 @@ impl<D> Driver<D> {
     }
 
     /// Get the acceleration/deceleration rate.
+    #[inline]
     pub fn acceleration(&self) -> f32 {
         self.acceleration
     }
@@ -132,16 +138,19 @@ impl<D> Driver<D> {
     }
 
     /// Get the most recently set speed.
+    #[inline]
     pub fn speed(&self) -> f32 {
         self.speed
     }
 
     /// Get the number of steps to go until reaching the target position.
+    #[inline]
     pub fn distance_to_go(&self) -> i64 {
         self.target_position() - self.current_position()
     }
 
     /// Get the most recently set target position.
+    #[inline]
     pub fn target_position(&self) -> i64 {
         self.target_position
     }
@@ -151,6 +160,7 @@ impl<D> Driver<D> {
     ///
     ///  Useful for setting a zero position on a stepper after an initial
     /// hardware positioning move.
+    #[inline]
     pub fn set_current_position(&mut self, position: i64) {
         self.current_position = position;
         self.target_position = position;
@@ -165,12 +175,14 @@ impl<D> Driver<D> {
     ///
     /// Stepper motors are an open-loop system, so there's no guarantee the
     /// motor will *actually* be at that position.
+    #[inline]
     pub fn current_position(&self) -> i64 {
         self.current_position
     }
 
     /// Sets a new target position that causes the stepper to stop as quickly as
     /// possible, using the current speed and acceleration parameters.
+    #[inline]
     pub fn stop(&mut self) {
         if self.speed == 0.0 {
             return;
@@ -187,6 +199,7 @@ impl<D> Driver<D> {
     }
 
     /// Checks to see if the motor is currently running to a target.
+    #[inline]
     pub fn is_running(&self) -> bool {
         self.speed == 0.0 && self.target_position() == self.current_position()
     }
@@ -268,7 +281,8 @@ impl<D: Device> Driver<D> {
     /// For correctness, the same [`SystemClock`] should be used every time
     /// [`Driver::poll()`] is called. Failing to do so may mess up internal
     /// timing calculations.
-    pub fn poll<C: SystemClock>(&mut self, clock: C) -> Result<(), D::Error>{
+    #[inline]
+    pub fn poll<C: SystemClock>(&mut self, clock: C) -> Result<(), D::Error> {
         if self.poll_speed(clock)? {
             self.compute_new_speed();
         }
