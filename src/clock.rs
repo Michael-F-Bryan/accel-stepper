@@ -20,6 +20,8 @@ where
 }
 
 /// A monotonically non-decreasing clock backed by the operating system.
+///
+/// Requires the `std` feature.
 #[cfg(feature = "std")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct OperatingSystemClock {

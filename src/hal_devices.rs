@@ -2,6 +2,8 @@ use crate::Device;
 use embedded_hal::digital::v2::OutputPin;
 
 /// A [`Device`] which has step and direction pins.
+///
+/// Requires the `hal` feature.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct StepAndDirection<Step, Direction> {
     step: Step,

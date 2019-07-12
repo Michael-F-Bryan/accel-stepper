@@ -3,6 +3,7 @@
 use libm::F32Ext;
 
 use crate::{Device, SystemClock};
+use core::f32::EPSILON;
 use core::time::Duration;
 
 /// A stepper motor driver.
@@ -95,7 +96,7 @@ impl<D> Driver<D> {
 
         let acceleration = acceleration.abs();
 
-        if self.acceleration != acceleration {
+        if (self.acceleration - acceleration).abs() < EPSILON {
             // Recompute step_counter per Equation 17
             self.step_counter =
                 (self.step_counter as f32 * self.acceleration / acceleration) as i64;
@@ -121,7 +122,7 @@ impl<D> Driver<D> {
     /// you call the [`Driver::poll_speed()`] method. The speed will be limited
     /// by the current value of [`Driver::max_speed()`].
     pub fn set_speed(&mut self, speed: f32) {
-        if speed == self.speed {
+        if (speed - self.speed).abs() < EPSILON {
             return;
         }
 
@@ -361,8 +362,8 @@ impl DurationHelpers for Duration {
 
         let nanos = nanos as u128;
         Duration::new(
-            (nanos / (NANOS_PER_SEC as u128)) as u64,
-            (nanos % (NANOS_PER_SEC as u128)) as u32,
+            (nanos / u128::from(NANOS_PER_SEC)) as u64,
+            (nanos % u128::from(NANOS_PER_SEC)) as u32,
         )
     }
 
