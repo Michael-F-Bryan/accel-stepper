@@ -18,3 +18,9 @@ void = "1.0.2"
 default = []
 std = []
 hal = ["embedded-hal"]
+
+[dev-dependencies]
+AccelStepper-sys = { path = "vendor/AccelStepper-sys" }
+quickcheck = "0.8.5"
+quickcheck_macros = "0.8.0"
+rand = "0.6.5"

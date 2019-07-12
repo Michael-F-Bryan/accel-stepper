@@ -15,10 +15,10 @@ pub trait Device {
 ///
 /// See [`fallible_func_device()`] for a version which accepts fallible
 /// callbacks.
-pub fn func_device<F, B>(forward: F, backward: B) -> impl Device<Error = Void>
+pub fn func_device<F, B, T>(forward: F, backward: B) -> impl Device<Error = Void>
 where
-    F: FnMut(),
-    B: FnMut(),
+    F: FnMut() -> T,
+    B: FnMut() -> T,
 {
     Infallible {
         forward,
@@ -33,10 +33,10 @@ struct Infallible<F, B> {
     backward: B,
 }
 
-impl<F, B> Device for Infallible<F, B>
+impl<F, B, T> Device for Infallible<F, B>
 where
-    F: FnMut(),
-    B: FnMut(),
+    F: FnMut() -> T,
+    B: FnMut() -> T,
 {
     type Error = Void;
 
@@ -58,10 +58,10 @@ where
 /// A device which uses callbacks which may fail.
 ///
 /// See [`func_device()`] for a version which uses infallible callbacks.
-pub fn fallible_func_device<F, B, E>(forward: F, backward: B) -> impl Device<Error = E>
+pub fn fallible_func_device<F, B, T, E>(forward: F, backward: B) -> impl Device<Error = E>
 where
-    F: FnMut() -> Result<(), E>,
-    B: FnMut() -> Result<(), E>,
+    F: FnMut() -> Result<T, E>,
+    B: FnMut() -> Result<T, E>,
 {
     Fallible {
         forward,
@@ -76,10 +76,10 @@ struct Fallible<F, B> {
     backward: B,
 }
 
-impl<F, B, E> Device for Fallible<F, B>
+impl<F, B, T, E> Device for Fallible<F, B>
 where
-    F: FnMut() -> Result<(), E>,
-    B: FnMut() -> Result<(), E>,
+    F: FnMut() -> Result<T, E>,
+    B: FnMut() -> Result<T, E>,
 {
     type Error = E;
 
