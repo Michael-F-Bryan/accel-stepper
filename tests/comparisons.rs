@@ -3,7 +3,7 @@ use accel_stepper::{Driver, Device, SystemClock};
 use quickcheck_macros::quickcheck;
 use quickcheck::{Gen, Arbitrary, TestResult};
 use rand::Rng;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -70,7 +70,7 @@ impl SystemClock for MicrosClock {
 
 /// Note: quickcheck doesn't use multi-threading, so this static will only
 /// be used by one thing at a time
-static ORIGINAL: Inner = Inner { forward: AtomicU32::new(0), back: AtomicU32::new(0) };
+static ORIGINAL: Inner = Inner { forward: AtomicUsize::new(0), back: AtomicUsize::new(0) };
 
 unsafe extern "C" fn forward() {
     ORIGINAL.forward.fetch_add(1, Ordering::SeqCst);
@@ -105,8 +105,8 @@ impl Arbitrary for Input {
 
 #[derive(Debug, Default)]
 struct Inner {
-    forward: AtomicU32,
-    back: AtomicU32,
+    forward: AtomicUsize,
+    back: AtomicUsize,
 }
 
 impl PartialEq for Inner {
