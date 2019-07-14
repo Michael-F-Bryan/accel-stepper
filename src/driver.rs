@@ -79,6 +79,7 @@ impl<D> Driver<D> {
         debug_assert!(steps_per_second > 0.0);
 
         self.max_speed = steps_per_second;
+        self.min_step_size = Duration::from_secs_f32_2(steps_per_second.recip());
     }
 
     /// Get the maximum speed.
@@ -96,7 +97,7 @@ impl<D> Driver<D> {
 
         let acceleration = acceleration.abs();
 
-        if (self.acceleration - acceleration).abs() < EPSILON {
+        if (self.acceleration - acceleration).abs() > EPSILON {
             // Recompute step_counter per Equation 17
             self.step_counter =
                 (self.step_counter as f32 * self.acceleration / acceleration) as i64;
@@ -242,19 +243,20 @@ impl<D> Driver<D> {
                 }
             } else if self.step_counter < 0 {
                 // currently decelerating, need to accel again?
-                if steps_to_stop < -distance_to && self.speed > 0.0 {
+                if steps_to_stop < -distance_to && self.speed < 0.0 {
                     self.step_counter = -self.step_counter;
                 }
             }
         }
 
         if self.step_counter == 0 {
+            // This is the first step after having stopped
             self.last_step_size = self.initial_step_size;
         } else {
             // Subsequent step. Works for accel (n is +_ve) and decel (n is -ve).
             let last_step_size = self.last_step_size.as_secs_f32_2();
             let last_step_size =
-                last_step_size - last_step_size * 2.0 / ((4 * self.step_counter) as f32 + 1.0);
+                last_step_size - last_step_size * 2.0 / ((4.0 * self.step_counter as f32) + 1.0);
             self.last_step_size = Duration::from_secs_f32_2(last_step_size);
             if self.last_step_size < self.min_step_size {
                 self.last_step_size = self.min_step_size;
@@ -264,6 +266,10 @@ impl<D> Driver<D> {
         self.step_counter += 1;
         self.step_interval = self.last_step_size;
         self.speed = 1.0 / self.last_step_size.as_secs_f32_2();
+
+        if distance_to < 0 {
+            self.speed *= -1.0;
+        }
     }
 }
 

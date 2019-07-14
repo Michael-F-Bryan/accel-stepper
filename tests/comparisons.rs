@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[quickcheck]
+#[ignore]
 fn both_versions_are_identical(input: Input) -> TestResult {
     let rust = Counter::default();
     let mut rust_driver = Driver::new(rust.clone());
@@ -20,40 +21,41 @@ fn both_versions_are_identical(input: Input) -> TestResult {
 
     // initialize the Rust driver with our motion parameters
     rust_driver.set_speed(input.speed);
+    rust_driver.set_max_speed(input.max_speed);
     rust_driver.set_acceleration(input.max_acceleration);
     rust_driver.move_to(input.target_location);
 
     // and initialize the AccelStepper driver
     unsafe {
         original_driver.setSpeed(input.speed);
+        original_driver.setMaxSpeed(input.max_speed);
         original_driver.setAcceleration(input.max_acceleration);
         original_driver.moveTo(input.target_location);
     }
 
+    assert_eq!(rust_driver.target_position(), unsafe { original_driver.targetPosition() });
+    assert_eq!(rust_driver.acceleration(), original_driver._acceleration);
+
     for i in 0..input.iterations {
         unsafe {
             // update the "time"
-            MICROS = i * 100;
+            MICROS = i * 1000;
 
             rust_driver.poll(&MicrosClock).unwrap();
             original_driver.run(); 
         }
-
-        assert_eq!(*rust.0, ORIGINAL, "{:?}                                  {:?}", rust_driver, original_driver);
     }
+
+    assert_eq!(rust_driver.speed().round(), unsafe {original_driver.speed().round() }, "{:#?}\n\n{:#?}\n", rust_driver, original_driver);
+    assert_eq!(*rust.0, ORIGINAL, "{:#?}\n\n{:#?}\n", rust_driver, original_driver);
 
     TestResult::from_bool(true)
 }
 
 extern "C" {
+    /// This is defined in the `AccelStepper-sys` crate's `Arduino.h` header
+    /// file.
     static mut MICROS: u64;
-}
-
-/// Inject our own `micros` function in at link-time so we can mock out the
-/// Arduino's timing functionality.
-#[no_mangle]
-pub unsafe extern "C" fn micros() -> u64 {
-    MICROS
 }
 
 struct MicrosClock;
@@ -81,6 +83,7 @@ unsafe extern "C" fn back() {
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct Input {
     speed: f32,
+    max_speed: f32,
     max_acceleration: f32,
     target_location: i64,
     iterations: u64,
@@ -88,8 +91,10 @@ struct Input {
 
 impl Arbitrary for Input {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        let speed = g.gen_range(0.0, 10000.0);
         Input {
-            speed: g.gen_range(0.0, 10000.0),
+            speed,
+            max_speed: g.gen_range(speed, 15000.0),
             max_acceleration: g.gen_range(0.0, 5000.0),
             target_location: g.gen_range(-500, 500),
             iterations: g.gen_range(0, 1000),
