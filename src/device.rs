@@ -1,13 +1,25 @@
+use core::time::Duration;
 use void::Void;
 
 /// An interface to the stepper motor.
 pub trait Device {
     /// The type of error that may be encountered when taking a step.
     ///
-    /// Use `!` (or `void::Void` on stable) if stepping can never fail.
+    /// Use `!` (or [`void::Void`] on stable) if stepping can never fail.
     type Error;
 
-    fn step(&mut self, position: i64) -> Result<(), Self::Error>;
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error>;
+}
+
+/// Extra contextual information passed to a [`Device`] when its
+/// [`Device::step()`] method is invoked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StepContext {
+    /// The new position, in steps.
+    pub position: i64,
+    /// The time (as dictated by [`crate::SystemClock::elapsed()`]) this step was
+    /// taken.
+    pub step_time: Duration,
 }
 
 /// A [`Device`] which will call one function for a forward step, and another
@@ -41,8 +53,8 @@ where
     type Error = Void;
 
     #[inline]
-    fn step(&mut self, position: i64) -> Result<(), Self::Error> {
-        let diff = position - self.previous_position;
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
+        let diff = ctx.position - self.previous_position;
 
         if diff > 0 {
             (self.forward)();
@@ -50,7 +62,7 @@ where
             (self.backward)();
         }
 
-        self.previous_position = position;
+        self.previous_position = ctx.position;
         Ok(())
     }
 }
@@ -84,8 +96,8 @@ where
     type Error = E;
 
     #[inline]
-    fn step(&mut self, position: i64) -> Result<(), Self::Error> {
-        let diff = position - self.previous_position;
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
+        let diff = ctx.position - self.previous_position;
 
         if diff > 0 {
             (self.forward)()?;
@@ -93,7 +105,7 @@ where
             (self.backward)()?;
         }
 
-        self.previous_position = position;
+        self.previous_position = ctx.position;
         Ok(())
     }
 }

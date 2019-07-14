@@ -1,4 +1,4 @@
-use crate::Device;
+use crate::{Device, StepContext};
 use embedded_hal::digital::v2::OutputPin;
 
 /// A [`Device`] which has step and direction pins.
@@ -49,9 +49,9 @@ where
     type Error = E;
 
     #[inline]
-    fn step(&mut self, position: i64) -> Result<(), Self::Error> {
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
         // copied straight from AccelStepper::step2()
-        match position & 0x03 {
+        match ctx.position & 0x03 {
             0 => self.set_output(0b10),
             1 => self.set_output(0b11),
             2 => self.set_output(0b01),

@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 use libm::F32Ext;
 
-use crate::{Device, SystemClock};
+use crate::{Device, StepContext, SystemClock};
 use core::f32::EPSILON;
 use core::time::Duration;
 
@@ -208,8 +208,8 @@ impl<D> Driver<D> {
 
     fn compute_new_speed(&mut self) {
         let distance_to = self.distance_to_go();
-        let steps_to_stop = (self.speed() * self.speed()) / (2.0 * self.acceleration());
-        let steps_to_stop = steps_to_stop.round() as i64;
+        let distance_to_stop = (self.speed() * self.speed()) / (2.0 * self.acceleration());
+        let steps_to_stop = distance_to_stop.round() as i64;
 
         if distance_to == 0 && steps_to_stop <= 1 {
             // We are at the target and its time to stop
@@ -224,12 +224,12 @@ impl<D> Driver<D> {
             // We need to go forwards, maybe decelerate now?
             if self.step_counter > 0 {
                 // Currently accelerating, need to decel now? Or maybe going the wrong way?
-                if steps_to_stop >= distance_to || self.speed < 0.0 {
+                if steps_to_stop >= distance_to || distance_to < 0 {
                     self.step_counter = -steps_to_stop; // start decelerating
                 }
             } else if self.step_counter < 0 {
                 // Currently decelerating, need to accel again?
-                if steps_to_stop < distance_to && self.speed > 0.0 {
+                if steps_to_stop < distance_to && distance_to > 0 {
                     self.step_counter = -self.step_counter; // start accelerating
                 }
             }
@@ -238,12 +238,12 @@ impl<D> Driver<D> {
             // decelerating.
             if self.step_counter > 0 {
                 // Currently accelerating, need to decel now? Or maybe going the wrong way?
-                if steps_to_stop >= -distance_to || self.speed > 0.0 {
+                if steps_to_stop >= -distance_to || distance_to > 0 {
                     self.step_counter = -steps_to_stop;
                 }
             } else if self.step_counter < 0 {
                 // currently decelerating, need to accel again?
-                if steps_to_stop < -distance_to && self.speed < 0.0 {
+                if steps_to_stop < -distance_to && distance_to < 0 {
                     self.step_counter = -self.step_counter;
                 }
             }
@@ -265,7 +265,7 @@ impl<D> Driver<D> {
 
         self.step_counter += 1;
         self.step_interval = self.last_step_size;
-        self.speed = 1.0 / self.last_step_size.as_secs_f32_2();
+        self.speed = self.last_step_size.as_secs_f32_2().recip();
 
         if distance_to < 0 {
             self.speed *= -1.0;
@@ -315,13 +315,17 @@ impl<D: Device> Driver<D> {
 
             // Note: we can't assign to current_position directly because we
             // a failed step shouldn't update any internal state
-            let new_position = if self.speed > 0.0 {
+            let new_position = if self.distance_to_go() > 0 {
                 self.current_position + 1
             } else {
                 self.current_position - 1
             };
 
-            self.device.step(new_position)?;
+            let ctx = StepContext {
+                position: new_position,
+                step_time: now,
+            };
+            self.device.step(&ctx)?;
 
             self.current_position = new_position;
             self.last_step_time = now; // Caution: does not account for costs in step()
@@ -389,7 +393,7 @@ mod tests {
     impl Device for NopDevice {
         type Error = ();
 
-        fn step(&mut self, _position: i64) -> Result<(), Self::Error> {
+        fn step(&mut self, _ctx: &StepContext) -> Result<(), Self::Error> {
             Ok(())
         }
     }

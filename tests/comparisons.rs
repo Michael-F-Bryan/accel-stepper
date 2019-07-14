@@ -1,14 +1,33 @@
 use AccelStepper_sys::AccelStepper;
-use accel_stepper::{Driver, Device, SystemClock};
+use std::convert::TryFrom;
+use accel_stepper::{Driver, Device, SystemClock, StepContext};
 use quickcheck_macros::quickcheck;
 use quickcheck::{Gen, Arbitrary, TestResult};
 use rand::Rng;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+macro_rules! qc_assert_eq {
+    ($left:expr, $right:expr, $fmt:expr, $($args:tt),+) => {
+        let msg = format!($fmt, $( $args ),+);
+        if $left != $right {
+            return TestResult::error(msg);
+        }
+    };
+    ($left:expr, $right:expr, $msg:expr) => {
+        let left = stringify!($left);
+        let right = stringify!($right);
+        qc_assert_eq!($left, $right, "Assertion failed: {} != {} ({:?} != {:?})... {}", left, right, $left, $right, $msg);
+    };
+    ($left:expr, $right:expr) => {
+        let left = stringify!($left);
+        let right = stringify!($right);
+        qc_assert_eq!($left, $right, "Assertion failed: {} != {} ({:?} != {:?})", left, right, $left, $right);
+    };
+}
+
 #[quickcheck]
-#[ignore]
 fn both_versions_are_identical(input: Input) -> TestResult {
     let rust = Counter::default();
     let mut rust_driver = Driver::new(rust.clone());
@@ -33,8 +52,9 @@ fn both_versions_are_identical(input: Input) -> TestResult {
         original_driver.moveTo(input.target_location);
     }
 
-    assert_eq!(rust_driver.target_position(), unsafe { original_driver.targetPosition() });
-    assert_eq!(rust_driver.acceleration(), original_driver._acceleration);
+    qc_assert_eq!(rust_driver.target_position(), unsafe { original_driver.targetPosition() });
+    qc_assert_eq!(rust_driver.acceleration(), original_driver._acceleration);
+    qc_assert_eq!(rust_driver.speed().round(), unsafe { original_driver.speed().round() });
 
     for i in 0..input.iterations {
         unsafe {
@@ -43,11 +63,16 @@ fn both_versions_are_identical(input: Input) -> TestResult {
 
             rust_driver.poll(&MicrosClock).unwrap();
             original_driver.run(); 
+
+            let repr = format!("{:#?}\n\n{:#?}\n", rust_driver, original_driver);
+            let last_ctx = rust.0.last_ctx.lock().unwrap();
+            qc_assert_eq!(u64::try_from(last_ctx.step_time.as_micros()).unwrap(), original_driver._lastStepTime, repr);
+            
+            qc_assert_eq!(rust_driver.speed().round(), original_driver.speed().round(), repr);
+            qc_assert_eq!(rust_driver.current_position(), original_driver.currentPosition(), repr);
+            qc_assert_eq!(*rust.0, *ORIGINAL, repr);
         }
     }
-
-    assert_eq!(rust_driver.speed().round(), unsafe {original_driver.speed().round() }, "{:#?}\n\n{:#?}\n", rust_driver, original_driver);
-    assert_eq!(*rust.0, ORIGINAL, "{:#?}\n\n{:#?}\n", rust_driver, original_driver);
 
     TestResult::from_bool(true)
 }
@@ -68,9 +93,14 @@ impl SystemClock for MicrosClock {
     }
 }
 
-/// Note: quickcheck doesn't use multi-threading, so this static will only
-/// be used by one thing at a time
-static ORIGINAL: Inner = Inner { forward: AtomicUsize::new(0), back: AtomicUsize::new(0) };
+lazy_static::lazy_static! {
+    /// The C++ `forward` and `back` callbacks aren't passed a state pointer, so
+    /// we need to persist state using global static variables.
+    /// 
+    /// Note: quickcheck doesn't use multi-threading, so this static will only
+    /// be used by one thing at a time
+    static ref ORIGINAL: Inner = Inner::default();
+}
 
 unsafe extern "C" fn forward() {
     ORIGINAL.forward.fetch_add(1, Ordering::SeqCst);
@@ -103,10 +133,24 @@ impl Arbitrary for Input {
 }
 
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Inner {
     forward: AtomicUsize,
     back: AtomicUsize,
+    last_ctx: Mutex<StepContext>,
+}
+
+impl Default for Inner {
+    fn default() -> Inner {
+Inner { 
+            forward: AtomicUsize::new(0), 
+            back: AtomicUsize::new(0),
+            last_ctx: Mutex::new(StepContext { 
+                position: 0,
+                step_time: Duration::from_secs(0),
+            })
+        }
+    }
 }
 
 impl PartialEq for Inner {
@@ -122,12 +166,14 @@ struct Counter(Arc<Inner>);
 impl Device for Counter {
     type Error = void::Void;
 
-    fn step(&mut self, position: i64) -> Result<(), Self::Error> {
-        if position > 0 {
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
+        if ctx.position > 0 {
             self.0.forward.fetch_add(1, Ordering::SeqCst);
-        } else if position < 0  {
+        } else if ctx.position < 0  {
             self.0.back.fetch_add(1, Ordering::SeqCst);
         }
+
+        *self.0.last_ctx.lock().unwrap() = ctx.clone();
 
         Ok(())
     }
