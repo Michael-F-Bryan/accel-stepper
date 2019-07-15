@@ -1,4 +1,4 @@
-image: "rust:1.31.1" # first release with stable editions
+image: "rust:1.34.0" # Required for TryFrom
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cache/cargo
 
