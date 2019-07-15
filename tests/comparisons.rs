@@ -28,6 +28,7 @@ macro_rules! qc_assert_eq {
 }
 
 #[quickcheck]
+#[ignore]
 fn both_versions_are_identical(input: Input) -> TestResult {
     let rust = Counter::default();
     let mut rust_driver = Driver::new(rust.clone());
