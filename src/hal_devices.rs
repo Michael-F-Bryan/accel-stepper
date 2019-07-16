@@ -15,9 +15,7 @@ impl<Step, Direction> StepAndDirection<Step, Direction> {
         StepAndDirection { step, direction }
     }
 
-    pub fn into_inner(self) -> (Step, Direction) {
-        (self.step, self.direction)
-    }
+    pub fn into_inner(self) -> (Step, Direction) { (self.step, self.direction) }
 }
 
 fn set_output<P: OutputPin>(pin: &mut P, mask: u8) -> Result<(), P::Error> {

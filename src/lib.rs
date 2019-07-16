@@ -24,10 +24,15 @@ mod device;
 mod driver;
 #[cfg(feature = "hal")]
 mod hal_devices;
+mod multi_driver;
+mod utils;
 
-pub use crate::clock::SystemClock;
-pub use crate::device::{fallible_func_device, func_device, Device, StepContext};
-pub use crate::driver::Driver;
+pub use crate::{
+    clock::SystemClock,
+    device::{fallible_func_device, func_device, Device, StepContext},
+    driver::Driver,
+    multi_driver::MultiDriver,
+};
 
 #[cfg(feature = "std")]
 pub use crate::clock::OperatingSystemClock;

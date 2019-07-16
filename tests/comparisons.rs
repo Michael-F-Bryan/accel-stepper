@@ -1,12 +1,16 @@
-use AccelStepper_sys::AccelStepper;
-use std::convert::TryFrom;
-use accel_stepper::{Driver, Device, SystemClock, StepContext};
+use accel_stepper::{Device, Driver, StepContext, SystemClock};
+use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
-use quickcheck::{Gen, Arbitrary, TestResult};
 use rand::Rng;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex};
-use std::time::Duration;
+use std::{
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
+use AccelStepper_sys::AccelStepper;
 
 macro_rules! qc_assert_eq {
     ($left:expr, $right:expr, $fmt:expr, $($args:tt),+) => {
@@ -37,7 +41,8 @@ fn both_versions_are_identical(input: Input) -> TestResult {
     ORIGINAL.forward.store(0, Ordering::SeqCst);
     ORIGINAL.back.store(0, Ordering::SeqCst);
 
-    let mut original_driver = unsafe { AccelStepper::new1(Some(forward), Some(back)) };
+    let mut original_driver =
+        unsafe { AccelStepper::new1(Some(forward), Some(back)) };
 
     // initialize the Rust driver with our motion parameters
     rust_driver.set_speed(input.speed);
@@ -53,9 +58,13 @@ fn both_versions_are_identical(input: Input) -> TestResult {
         original_driver.moveTo(input.target_location);
     }
 
-    qc_assert_eq!(rust_driver.target_position(), unsafe { original_driver.targetPosition() });
+    qc_assert_eq!(rust_driver.target_position(), unsafe {
+        original_driver.targetPosition()
+    });
     qc_assert_eq!(rust_driver.acceleration(), original_driver._acceleration);
-    qc_assert_eq!(rust_driver.speed().round(), unsafe { original_driver.speed().round() });
+    qc_assert_eq!(rust_driver.speed().round(), unsafe {
+        original_driver.speed().round()
+    });
 
     for i in 0..input.iterations {
         unsafe {
@@ -63,14 +72,27 @@ fn both_versions_are_identical(input: Input) -> TestResult {
             MICROS = i * 1000;
 
             rust_driver.poll(&mut rust, &MicrosClock).unwrap();
-            original_driver.run(); 
+            original_driver.run();
 
-            let repr = format!("{:#?}\n\n{:#?}\n", rust_driver, original_driver);
+            let repr =
+                format!("{:#?}\n\n{:#?}\n", rust_driver, original_driver);
             let last_ctx = rust.last_ctx.lock().unwrap();
-            qc_assert_eq!(u64::try_from(last_ctx.step_time.as_micros()).unwrap(), original_driver._lastStepTime, repr);
-            
-            qc_assert_eq!(rust_driver.speed().round(), original_driver.speed().round(), repr);
-            qc_assert_eq!(rust_driver.current_position(), original_driver.currentPosition(), repr);
+            qc_assert_eq!(
+                u64::try_from(last_ctx.step_time.as_micros()).unwrap(),
+                original_driver._lastStepTime,
+                repr
+            );
+
+            qc_assert_eq!(
+                rust_driver.speed().round(),
+                original_driver.speed().round(),
+                repr
+            );
+            qc_assert_eq!(
+                rust_driver.current_position(),
+                original_driver.currentPosition(),
+                repr
+            );
             qc_assert_eq!(rust, *ORIGINAL, repr);
         }
     }
@@ -87,17 +109,13 @@ extern "C" {
 struct MicrosClock;
 
 impl SystemClock for MicrosClock {
-    fn elapsed(&self) -> Duration {
-        unsafe {
-            Duration::from_micros(MICROS)
-        }
-    }
+    fn elapsed(&self) -> Duration { unsafe { Duration::from_micros(MICROS) } }
 }
 
 lazy_static::lazy_static! {
     /// The C++ `forward` and `back` callbacks aren't passed a state pointer, so
     /// we need to persist state using global static variables.
-    /// 
+    ///
     /// Note: quickcheck doesn't use multi-threading, so this static will only
     /// be used by one thing at a time
     static ref ORIGINAL: Counter = Counter::default();
@@ -107,9 +125,7 @@ unsafe extern "C" fn forward() {
     ORIGINAL.forward.fetch_add(1, Ordering::SeqCst);
 }
 
-unsafe extern "C" fn back() {
-    ORIGINAL.back.fetch_add(1, Ordering::SeqCst);
-}
+unsafe extern "C" fn back() { ORIGINAL.back.fetch_add(1, Ordering::SeqCst); }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct Input {
@@ -133,7 +149,6 @@ impl Arbitrary for Input {
     }
 }
 
-
 #[derive(Debug)]
 struct Counter {
     forward: AtomicUsize,
@@ -143,21 +158,23 @@ struct Counter {
 
 impl Default for Counter {
     fn default() -> Counter {
-Counter { 
-            forward: AtomicUsize::new(0), 
+        Counter {
+            forward: AtomicUsize::new(0),
             back: AtomicUsize::new(0),
-            last_ctx: Mutex::new(StepContext { 
+            last_ctx: Mutex::new(StepContext {
                 position: 0,
                 step_time: Duration::from_secs(0),
-            })
+            }),
         }
     }
 }
 
 impl PartialEq for Counter {
     fn eq(&self, other: &Counter) -> bool {
-        self.forward.load(Ordering::SeqCst) == other.forward.load(Ordering::SeqCst) && 
-        self.back.load(Ordering::SeqCst) == other.back.load(Ordering::SeqCst)
+        self.forward.load(Ordering::SeqCst)
+            == other.forward.load(Ordering::SeqCst)
+            && self.back.load(Ordering::SeqCst)
+                == other.back.load(Ordering::SeqCst)
     }
 }
 

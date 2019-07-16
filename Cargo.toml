@@ -13,6 +13,7 @@ all-features = true
 libm = "0.1.4"
 embedded-hal = { version = "0.2.3", optional = true }
 void = "1.0.2"
+arrayvec = "0.4.11"
 
 [features]
 default = []
