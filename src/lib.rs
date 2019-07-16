@@ -32,6 +32,7 @@ pub use crate::{
     device::{fallible_func_device, func_device, Device, StepContext},
     driver::Driver,
     multi_driver::MultiDriver,
+    utils::CummulativeSteps,
 };
 
 #[cfg(feature = "std")]

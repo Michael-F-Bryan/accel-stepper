@@ -1,3 +1,5 @@
+#[allow(unused_imports)] // used for rustdoc links
+use crate::CummulativeSteps;
 #[cfg(not(feature = "std"))]
 #[allow(unused_imports)]
 use libm::F32Ext;
@@ -9,6 +11,11 @@ use crate::{
 use core::{f32::EPSILON, time::Duration};
 
 /// A stepper motor driver.
+/// 
+/// # Note
+///
+/// You may want to use the [`CummulativeSteps`] helper to convert a
+/// movement in "real" units (e.g. mm or inches) to the correct number of steps.
 #[derive(Debug, PartialEq)]
 pub struct Driver {
     max_speed: f32,
