@@ -7,9 +7,8 @@ use core::f32::EPSILON;
 use core::time::Duration;
 
 /// A stepper motor driver.
-#[derive(Debug, PartialEq, Default)]
-pub struct Driver<D> {
-    device: D,
+#[derive(Debug, PartialEq)]
+pub struct Driver {
     max_speed: f32,
     acceleration: f32,
     current_position: i64,
@@ -26,10 +25,9 @@ pub struct Driver<D> {
     min_step_size: Duration,
 }
 
-impl<D> Driver<D> {
-    pub fn new(device: D) -> Driver<D> {
+impl Driver {
+    pub fn new() -> Driver {
         Driver {
-            device,
             max_speed: 1.0,
             acceleration: 10.0,
             current_position: 0,
@@ -42,14 +40,6 @@ impl<D> Driver<D> {
             last_step_size: Duration::default(),
             last_step_time: Duration::default(),
         }
-    }
-
-    pub fn inner(&mut self) -> &mut D {
-        &mut self.device
-    }
-
-    pub fn into_inner(self) -> D {
-        self.device
     }
 
     /// Move to the specified location relative to the zero point (typically
@@ -271,9 +261,7 @@ impl<D> Driver<D> {
             self.speed *= -1.0;
         }
     }
-}
 
-impl<D: Device> Driver<D> {
     /// Poll the driver and step it if a step is due.
     ///
     /// This function must called as frequently as possoble, but at least once
@@ -289,8 +277,11 @@ impl<D: Device> Driver<D> {
     /// [`Driver::poll()`] is called. Failing to do so may mess up internal
     /// timing calculations.
     #[inline]
-    pub fn poll<C: SystemClock>(&mut self, clock: &C) -> Result<(), D::Error> {
-        if self.poll_speed(clock)? {
+    pub fn poll<C, D>(&mut self, device: D, clock: &C) -> Result<(), D::Error> 
+        where C: SystemClock,
+            D: Device,
+    {
+        if self.poll_speed(device, clock)? {
             self.compute_new_speed();
         }
 
@@ -302,7 +293,10 @@ impl<D: Device> Driver<D> {
     ///
     /// You must call this as frequently as possible, but at least once per step
     /// interval, returns true if the motor was stepped.
-    pub fn poll_speed<C: SystemClock>(&mut self, clock: &C) -> Result<bool, D::Error> {
+    pub fn poll_speed<C, D>(&mut self, mut device: D, clock: &C) -> Result<bool, D::Error> 
+        where C: SystemClock,
+            D: Device,
+    {
         // Dont do anything unless we actually have a step interval
         if self.step_interval == Duration::default() {
             return Ok(false);
@@ -325,7 +319,7 @@ impl<D: Device> Driver<D> {
                 position: new_position,
                 step_time: now,
             };
-            self.device.step(&ctx)?;
+            device.step(&ctx)?;
 
             self.current_position = new_position;
             self.last_step_time = now; // Caution: does not account for costs in step()
@@ -334,6 +328,12 @@ impl<D: Device> Driver<D> {
         } else {
             Ok(false)
         }
+    }
+}
+
+impl Default for Driver {
+    fn default() -> Driver {
+        Driver::new()
     }
 }
 
@@ -414,10 +414,7 @@ mod tests {
 
     #[test]
     fn compute_new_speeds_when_already_at_target() {
-        let mut driver = Driver {
-            device: NopDevice,
-            ..Default::default()
-        };
+        let mut driver = Driver::default();
         driver.target_position = driver.current_position;
 
         driver.compute_new_speed();
@@ -433,12 +430,12 @@ mod tests {
         let clock = DummyClock::default();
 
         {
-            let dev = crate::func_device(|| forward += 1, || back += 1);
-            let mut driver = Driver::new(dev);
+            let mut dev = crate::func_device(|| forward += 1, || back += 1);
+            let mut driver = Driver::new();
             driver.target_position = driver.current_position;
 
             for _ in 0..100 {
-                driver.poll(&clock).unwrap();
+                driver.poll(&mut dev, &clock).unwrap();
             }
         }
 

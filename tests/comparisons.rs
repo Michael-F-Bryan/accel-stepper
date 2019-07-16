@@ -5,7 +5,7 @@ use quickcheck_macros::quickcheck;
 use quickcheck::{Gen, Arbitrary, TestResult};
 use rand::Rng;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex};
 use std::time::Duration;
 
 macro_rules! qc_assert_eq {
@@ -30,8 +30,8 @@ macro_rules! qc_assert_eq {
 #[quickcheck]
 #[ignore]
 fn both_versions_are_identical(input: Input) -> TestResult {
-    let rust = Counter::default();
-    let mut rust_driver = Driver::new(rust.clone());
+    let mut rust = Counter::default();
+    let mut rust_driver = Driver::new();
 
     // make sure the counter is zeroed out at the start of the run
     ORIGINAL.forward.store(0, Ordering::SeqCst);
@@ -62,16 +62,16 @@ fn both_versions_are_identical(input: Input) -> TestResult {
             // update the "time"
             MICROS = i * 1000;
 
-            rust_driver.poll(&MicrosClock).unwrap();
+            rust_driver.poll(&mut rust, &MicrosClock).unwrap();
             original_driver.run(); 
 
             let repr = format!("{:#?}\n\n{:#?}\n", rust_driver, original_driver);
-            let last_ctx = rust.0.last_ctx.lock().unwrap();
+            let last_ctx = rust.last_ctx.lock().unwrap();
             qc_assert_eq!(u64::try_from(last_ctx.step_time.as_micros()).unwrap(), original_driver._lastStepTime, repr);
             
             qc_assert_eq!(rust_driver.speed().round(), original_driver.speed().round(), repr);
             qc_assert_eq!(rust_driver.current_position(), original_driver.currentPosition(), repr);
-            qc_assert_eq!(*rust.0, *ORIGINAL, repr);
+            qc_assert_eq!(rust, *ORIGINAL, repr);
         }
     }
 
@@ -100,7 +100,7 @@ lazy_static::lazy_static! {
     /// 
     /// Note: quickcheck doesn't use multi-threading, so this static will only
     /// be used by one thing at a time
-    static ref ORIGINAL: Inner = Inner::default();
+    static ref ORIGINAL: Counter = Counter::default();
 }
 
 unsafe extern "C" fn forward() {
@@ -135,15 +135,15 @@ impl Arbitrary for Input {
 
 
 #[derive(Debug)]
-struct Inner {
+struct Counter {
     forward: AtomicUsize,
     back: AtomicUsize,
     last_ctx: Mutex<StepContext>,
 }
 
-impl Default for Inner {
-    fn default() -> Inner {
-Inner { 
+impl Default for Counter {
+    fn default() -> Counter {
+Counter { 
             forward: AtomicUsize::new(0), 
             back: AtomicUsize::new(0),
             last_ctx: Mutex::new(StepContext { 
@@ -154,27 +154,26 @@ Inner {
     }
 }
 
-impl PartialEq for Inner {
-    fn eq(&self, other: &Inner) -> bool {
+impl PartialEq for Counter {
+    fn eq(&self, other: &Counter) -> bool {
         self.forward.load(Ordering::SeqCst) == other.forward.load(Ordering::SeqCst) && 
         self.back.load(Ordering::SeqCst) == other.back.load(Ordering::SeqCst)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-struct Counter(Arc<Inner>);
-
 impl Device for Counter {
     type Error = void::Void;
 
     fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
-        if ctx.position > 0 {
-            self.0.forward.fetch_add(1, Ordering::SeqCst);
-        } else if ctx.position < 0  {
-            self.0.back.fetch_add(1, Ordering::SeqCst);
+        let diff = ctx.position - self.last_ctx.lock().unwrap().position;
+
+        if diff > 0 {
+            self.forward.fetch_add(1, Ordering::SeqCst);
+        } else if diff < 0 {
+            self.back.fetch_add(1, Ordering::SeqCst);
         }
 
-        *self.0.last_ctx.lock().unwrap() = ctx.clone();
+        *self.last_ctx.lock().unwrap() = ctx.clone();
 
         Ok(())
     }

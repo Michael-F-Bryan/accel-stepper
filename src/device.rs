@@ -11,6 +11,14 @@ pub trait Device {
     fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error>;
 }
 
+impl<'a, D: Device> Device for &'a mut D {
+    type Error = D::Error;
+
+    fn step(&mut self, ctx: &StepContext) -> Result<(), Self::Error> {
+        (*self).step(ctx)
+    }
+}
+
 /// Extra contextual information passed to a [`Device`] when its
 /// [`Device::step()`] method is invoked.
 #[derive(Debug, Clone, PartialEq)]
