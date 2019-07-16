@@ -3,19 +3,19 @@ use crate::{utils::DurationHelpers, Device, Driver, SystemClock};
 use arrayvec::ArrayVec;
 use core::time::Duration;
 
-/// The maximum number of [`Driver`]s that a [`MultiDriver`] can manage when
-/// compiled without the `std` feature.
-#[allow(dead_code)]
-pub const MAX_DRIVERS: usize = 10;
-
+/// Controller for moving multiple axes in a coordinated fashion.
 pub struct MultiDriver {
     #[cfg(feature = "std")]
     drivers: Vec<Driver>,
     #[cfg(not(feature = "std"))]
-    drivers: ArrayVec<[Driver; MAX_DRIVERS]>,
+    drivers: ArrayVec<[Driver; MultiDriver::MAX_DRIVERS]>,
 }
 
 impl MultiDriver {
+    /// The maximum number of [`Driver`]s that a [`MultiDriver`] can manage when
+    /// compiled without the `std` feature.
+    pub const MAX_DRIVERS: usize = 10;
+
     pub fn new() -> MultiDriver {
         MultiDriver {
             drivers: Default::default(),
@@ -28,7 +28,7 @@ impl MultiDriver {
     /// # Panics
     ///
     /// When compiling without the `std` feature flag, the [`MultiDriver`] can
-    /// only manage up to [`MAX_DRIVERS`] drivers.
+    /// only manage up to [`MultiDriver::MAX_DRIVERS`] drivers.
     pub fn push_driver(&mut self, driver: Driver) { self.drivers.push(driver); }
 
     pub fn drivers(&self) -> &[Driver] { &self.drivers }
@@ -62,7 +62,7 @@ impl MultiDriver {
             return;
         }
 
-        let longest_time: f32 = longest_time.as_secs_f32_2();
+        let longest_time = longest_time.as_secs_f32_2();
 
         // Now work out a new max speed for each stepper so they will all
         // arrived at the same time of longestTime
