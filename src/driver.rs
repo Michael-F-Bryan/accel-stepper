@@ -16,7 +16,7 @@ use core::{f32::EPSILON, time::Duration};
 ///
 /// You may want to use the [`CummulativeSteps`] helper to convert a
 /// movement in "real" units (e.g. mm or inches) to the correct number of steps.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Driver {
     max_speed: f32,
     acceleration: f32,
@@ -36,19 +36,14 @@ pub struct Driver {
 
 impl Driver {
     pub fn new() -> Driver {
-        Driver {
-            max_speed: 1.0,
-            acceleration: 10.0,
-            current_position: 0,
-            step_interval: Duration::new(0, 0),
-            speed: 0.0,
-            target_position: 0,
-            step_counter: 0,
-            initial_step_size: Duration::new(0, 0),
-            min_step_size: Duration::new(0, 0),
-            last_step_size: Duration::new(0, 0),
-            last_step_time: Duration::new(0, 0),
-        }
+        let mut d = Driver::default();
+
+        // Set up some non-zero defaults so we can immediately run at constant
+        // speeds
+        d.set_max_speed(1.0);
+        d.set_acceleration(1.0);
+
+        d
     }
 
     /// Move to the specified location relative to the zero point (typically
@@ -118,8 +113,8 @@ impl Driver {
     /// Speeds of more than 1000 steps per second are unreliable. Very slow
     /// speeds may be set (eg 0.00027777 for once per hour, approximately).
     /// Speed accuracy depends on the system's clock. Jitter depends on how
-    /// frequently you call the [`Driver::poll_speed()`] method. The speed
-    /// will be limited by the current value of [`Driver::max_speed()`].
+    /// frequently you call the [`Driver::poll_at_constant_speed()`] method. The
+    /// speed will be limited by the current value of [`Driver::max_speed()`].
     pub fn set_speed(&mut self, speed: f32) {
         if (speed - self.speed).abs() < EPSILON {
             return;
@@ -196,7 +191,7 @@ impl Driver {
     /// Checks to see if the motor is currently running to a target.
     #[inline]
     pub fn is_running(&self) -> bool {
-        self.speed == 0.0 && self.target_position() == self.current_position()
+        self.speed != 0.0 || self.target_position() != self.current_position()
     }
 
     fn compute_new_speed(&mut self) {
@@ -290,7 +285,7 @@ impl Driver {
         C: SystemClock,
         D: Device,
     {
-        if self.poll_speed(device, clock)? {
+        if self.poll_at_constant_speed(device, clock)? {
             self.compute_new_speed();
         }
 
@@ -302,7 +297,7 @@ impl Driver {
     ///
     /// You must call this as frequently as possible, but at least once per step
     /// interval, returns true if the motor was stepped.
-    pub fn poll_speed<C, D>(
+    pub fn poll_at_constant_speed<C, D>(
         &mut self,
         mut device: D,
         clock: C,
@@ -343,10 +338,6 @@ impl Driver {
             Ok(false)
         }
     }
-}
-
-impl Default for Driver {
-    fn default() -> Driver { Driver::new() }
 }
 
 #[cfg(test)]
