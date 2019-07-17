@@ -3,6 +3,12 @@ name = "accel-stepper"
 version = "0.1.0"
 authors = ["Michael Bryan <michaelfbryan@gmail.com>"]
 edition = "2018"
+description = "A library for controlling stepper motors."
+repository = "https://gitlab.com/Michael-F-Bryan/accel-stepper"
+readme = "README.md"
+keywords = ["stepper", "stepper-motor", "motor", "AccelStepper"]
+categories = ["embedded", "hardware-support", "no-std"]
+license = "GPLv2"
 
 [package.metadata.docs.rs]
 all-features = true
