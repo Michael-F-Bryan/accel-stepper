@@ -8,7 +8,7 @@ repository = "https://gitlab.com/Michael-F-Bryan/accel-stepper"
 readme = "README.md"
 keywords = ["stepper", "stepper-motor", "motor", "AccelStepper"]
 categories = ["embedded", "hardware-support", "no-std"]
-license = "GPLv2"
+license = "GPL-2.0"
 
 [package.metadata.docs.rs]
 all-features = true
